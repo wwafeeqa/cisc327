@@ -52,3 +52,54 @@ def test_delete_equipment(client):
     assert response.status_code == 204
     get_response = client.get(f"/equipment/{equipment_id}")
     assert get_response.status_code == 404
+
+#F8 and F9
+def test_list_renters(client):
+    """
+    Creates 3 renters then lists them out and verifies info
+    """
+    client.post("/renters", json={"name": "Robert Pattinson","email": "robpattinson@gmail.com"})
+    client.post("/renters", json={"name": "Auston Matthews","email": "austonmatthews34@gmail.com"})
+    client.post("/renters", json={"name": "Noah Kahan","email": "noahkahan@gmail.com"})
+
+    response = client.get("/renters")
+    assert response.status_code == 200
+    renters = response.get_json()
+
+    assert len(renters) == 3
+    assert renters[0]["name"] == "Robert Pattinson"
+    assert renters[1]["name"] == "Auston Matthews"
+    assert renters[2]["name"] == "Noah Kahan"
+
+#F10
+def test_get_one_renter(client):
+    """
+    Adds renter, retrieves them, checks the request, verifies info
+    """
+    add_response=client.post("/renters", json={"name": "Michael Jordan","email": "mjordan@gmail.com"})
+    renter_id = add_response.get_json()["id"]
+    response = client.get(f"/renters/{renter_id}")
+    assert response.status_code == 200
+    renter = response.get_json()
+
+    assert renter["id"] == renter_id
+    assert renter["name"] == "Michael Jordan"
+    assert renter["email"] == "mjordan@gmail.com"
+
+#F11
+def test_update_renter_email(client):
+    """
+    Adds renter, updates the email address, retrieve renter and verifies info
+    """
+    add_response=client.post("/renters", json={"name": "Deborah Ryan","email": "debbyryan@gmail.com"})
+    renter_id = add_response.get_json()["id"]
+
+    #updating the email address
+    response = client.put(f"/renters/{renter_id}", json={"name": "Deborah Ryan","email": "deborahryan@gmail.com"})
+    assert response.status_code == 200
+    get_response = client.get(f"/renters/{renter_id}")
+    assert get_response.status_code == 200
+    renter = get_response.get_json()
+
+    assert renter["email"] == "deborahryan@gmail.com"
+    assert renter["name"] == "Deborah Ryan"
