@@ -14,7 +14,7 @@ pip install -r requirements.txt
 python run.py
 ```
 
-The API runs at `http://127.0.0.1:5000`.
+The API runs at `http://127.0.0.1:5000`.python run.py
 
 ## Web UI
 
