@@ -136,3 +136,174 @@ def test_availability_reflects_out_of_service_status(client):
 
 def test_availability_unknown_equipment_returns_404(client):
     assert client.get("/equipment/999/availability").status_code == 404
+
+
+# ------------------------------------------------------------
+# F13: Check out equipment (POST /rentals, /ui/rentals) — R7, R13, R15
+# ------------------------------------------------------------
+
+
+def test_checkout_creates_open_rental(client):
+    """A checkout records who rented what, and starts with no return date."""
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+
+    rental = checkout(client, equipment_id, renter_id)
+    assert rental["equipment_id"] == equipment_id
+    assert rental["renter_id"] == renter_id
+    assert rental["rental_date"] == date.today().isoformat()
+    assert rental["return_date"] is None
+
+
+def test_checkout_due_date_is_seven_days_after_rental_date(client):
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+
+    rental = checkout(client, equipment_id, renter_id)
+    rental_date = date.fromisoformat(rental["rental_date"])
+    due_date = date.fromisoformat(rental["due_date"])
+    assert due_date - rental_date == timedelta(days=7)
+
+
+def test_checkout_decrements_available_units(client):
+    equipment_id = create_equipment(client, total_units=3)
+    renter_id = create_renter(client)
+
+    checkout(client, equipment_id, renter_id)
+    assert available_units(client, equipment_id) == 2
+
+
+def test_checkout_records_deposit_amount(client):
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+
+    rental = checkout(client, equipment_id, renter_id, deposit_amount=50.0)
+    assert rental["deposit_amount"] == 50.0
+    assert rental["deposit_released"] is False
+
+
+def test_checkout_deposit_defaults_to_zero(client):
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+
+    rental = checkout(client, equipment_id, renter_id)
+    assert rental["deposit_amount"] == 0.0
+
+
+def test_checkout_unknown_equipment_returns_404(client):
+    renter_id = create_renter(client)
+
+    response = client.post(
+        "/rentals", json={"equipment_id": 999, "renter_id": renter_id}
+    )
+    assert response.status_code == 404
+    assert client.get("/rentals").get_json() == []
+
+
+def test_checkout_out_of_service_equipment_is_rejected(client):
+    """Out-of-service equipment cannot be rented, and its units stay untouched."""
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    client.patch(f"/equipment/{equipment_id}/status", json={"is_available": False})
+
+    response = client.post(
+        "/rentals", json={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+    assert response.status_code == 400
+    assert available_units(client, equipment_id) == 2
+    assert client.get("/rentals").get_json() == []
+
+
+def test_checkout_with_no_units_left_is_rejected(client):
+    """A checkout cannot push available_units below zero."""
+    equipment_id = create_equipment(client, total_units=1)
+    renter_id = create_renter(client)
+    checkout(client, equipment_id, renter_id)
+
+    response = client.post(
+        "/rentals", json={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+    assert response.status_code == 400
+    assert available_units(client, equipment_id) == 0
+
+
+def test_checkout_unknown_renter_is_rejected(client):
+    """A rental must belong to a renter that exists."""
+    equipment_id = create_equipment(client, total_units=2)
+
+    response = client.post(
+        "/rentals", json={"equipment_id": equipment_id, "renter_id": 999}
+    )
+    assert response.status_code == 404
+    assert available_units(client, equipment_id) == 2
+
+
+def test_checkout_equipment_with_zero_total_units_is_rejected(client):
+    """Boundary: an item created with no units can never be rented."""
+    equipment_id = create_equipment(client, total_units=0)
+    renter_id = create_renter(client)
+
+    response = client.post(
+        "/rentals", json={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+    assert response.status_code == 400
+    assert available_units(client, equipment_id) == 0
+
+
+def test_checkout_missing_renter_id_is_rejected(client):
+    """A checkout with no renter is a client error and must not consume a unit."""
+    equipment_id = create_equipment(client, total_units=2)
+
+    response = client.post("/rentals", json={"equipment_id": equipment_id})
+    assert response.status_code == 400
+    assert available_units(client, equipment_id) == 2
+
+
+def test_ui_checkout_creates_rental_and_redirects(client):
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+
+    response = client.post(
+        "/ui/rentals", data={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+    assert response.status_code == 302
+
+    rentals = client.get("/rentals").get_json()
+    assert len(rentals) == 1
+    assert rentals[0]["equipment_id"] == equipment_id
+    assert rentals[0]["renter_id"] == renter_id
+    assert available_units(client, equipment_id) == 1
+
+
+def test_ui_checkout_unknown_equipment_creates_nothing(client):
+    renter_id = create_renter(client)
+
+    response = client.post(
+        "/ui/rentals", data={"equipment_id": 999, "renter_id": renter_id}
+    )
+    assert response.status_code == 302
+    assert client.get("/rentals").get_json() == []
+
+
+def test_ui_checkout_out_of_service_equipment_creates_nothing(client):
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    client.patch(f"/equipment/{equipment_id}/status", json={"is_available": False})
+
+    client.post(
+        "/ui/rentals", data={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+    assert client.get("/rentals").get_json() == []
+    assert available_units(client, equipment_id) == 2
+
+
+def test_ui_checkout_with_no_units_left_creates_nothing(client):
+    equipment_id = create_equipment(client, total_units=1)
+    renter_id = create_renter(client)
+    checkout(client, equipment_id, renter_id)
+
+    client.post(
+        "/ui/rentals", data={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+    assert len(client.get("/rentals").get_json()) == 1
+    assert available_units(client, equipment_id) == 0
