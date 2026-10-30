@@ -307,3 +307,55 @@ def test_ui_checkout_with_no_units_left_creates_nothing(client):
     )
     assert len(client.get("/rentals").get_json()) == 1
     assert available_units(client, equipment_id) == 0
+
+
+# ------------------------------------------------------------
+# F14: Return equipment (PUT /rentals/<id>/return, UI return)
+# ------------------------------------------------------------
+
+
+def test_return_sets_return_date_and_restores_unit(client):
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+
+    response = client.put(f"/rentals/{rental['id']}/return")
+    assert response.status_code == 200
+    assert response.get_json()["return_date"] == date.today().isoformat()
+    assert available_units(client, equipment_id) == 2
+
+
+def test_return_twice_is_rejected_and_units_not_double_counted(client):
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+    client.put(f"/rentals/{rental['id']}/return")
+
+    response = client.put(f"/rentals/{rental['id']}/return")
+    assert response.status_code == 400
+    assert available_units(client, equipment_id) == 2
+
+
+def test_return_unknown_rental_returns_404(client):
+    assert client.put("/rentals/999/return").status_code == 404
+
+
+def test_ui_return_sets_return_date_and_restores_unit(client):
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+
+    response = client.post(f"/ui/rentals/{rental['id']}/return")
+    assert response.status_code == 302
+    assert find_rental(client, rental["id"])["return_date"] == date.today().isoformat()
+    assert available_units(client, equipment_id) == 2
+
+
+def test_ui_return_twice_does_not_double_count_units(client):
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+
+    client.post(f"/ui/rentals/{rental['id']}/return")
+    client.post(f"/ui/rentals/{rental['id']}/return")
+    assert available_units(client, equipment_id) == 2
