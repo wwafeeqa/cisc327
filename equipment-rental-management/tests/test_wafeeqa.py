@@ -359,3 +359,84 @@ def test_ui_return_twice_does_not_double_count_units(client):
     client.post(f"/ui/rentals/{rental['id']}/return")
     client.post(f"/ui/rentals/{rental['id']}/return")
     assert available_units(client, equipment_id) == 2
+
+
+# ------------------------------------------------------------
+# F15: Look up rentals (GET /rentals?renter_id=&equipment_id=) — R9, R10, R19
+# ------------------------------------------------------------
+
+
+def make_crossed_rentals(client):
+    """Create rentals whose equipment and renter ids deliberately differ.
+
+    Renter 1 rents equipment 2 and renter 2 rents equipment 1, so a filter that
+    compares against the wrong field returns the wrong rental rather than
+    passing by coincidence.
+    """
+    first_equipment = create_equipment(client, name="Extension Ladder")
+    second_equipment = create_equipment(client, name="Pressure Washer")
+    first_renter = create_renter(client, name="Sam Lee")
+    second_renter = create_renter(client, name="Alex Chen")
+
+    rental_a = checkout(client, first_equipment, second_renter)
+    rental_b = checkout(client, second_equipment, first_renter)
+    return {
+        "first_equipment": first_equipment,
+        "second_equipment": second_equipment,
+        "first_renter": first_renter,
+        "second_renter": second_renter,
+        "rental_a": rental_a["id"],
+        "rental_b": rental_b["id"],
+    }
+
+
+def rental_ids(response):
+    assert response.status_code == 200
+    return sorted(r["id"] for r in response.get_json())
+
+
+def test_lookup_without_filters_returns_all_rentals(client):
+    ids = make_crossed_rentals(client)
+
+    assert rental_ids(client.get("/rentals")) == [ids["rental_a"], ids["rental_b"]]
+
+
+def test_lookup_filters_by_renter(client):
+    ids = make_crossed_rentals(client)
+
+    response = client.get(f"/rentals?renter_id={ids['first_renter']}")
+    assert rental_ids(response) == [ids["rental_b"]]
+
+
+def test_lookup_filters_by_equipment(client):
+    ids = make_crossed_rentals(client)
+
+    response = client.get(f"/rentals?equipment_id={ids['first_equipment']}")
+    assert rental_ids(response) == [ids["rental_a"]]
+
+
+def test_lookup_filters_by_renter_and_equipment_together(client):
+    ids = make_crossed_rentals(client)
+
+    response = client.get(
+        f"/rentals?renter_id={ids['first_renter']}"
+        f"&equipment_id={ids['second_equipment']}"
+    )
+    assert rental_ids(response) == [ids["rental_b"]]
+
+
+def test_lookup_with_no_matches_returns_empty_list(client):
+    make_crossed_rentals(client)
+
+    assert rental_ids(client.get("/rentals?renter_id=999")) == []
+    assert rental_ids(client.get("/rentals?equipment_id=999")) == []
+
+
+def test_lookup_includes_returned_rentals(client):
+    """A returned rental stays in the rental history."""
+    ids = make_crossed_rentals(client)
+    client.put(f"/rentals/{ids['rental_a']}/return")
+
+    response = client.get(f"/rentals?equipment_id={ids['first_equipment']}")
+    assert rental_ids(response) == [ids["rental_a"]]
+    assert response.get_json()[0]["return_date"] is not None
