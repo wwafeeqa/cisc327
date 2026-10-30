@@ -440,3 +440,116 @@ def test_lookup_includes_returned_rentals(client):
     response = client.get(f"/rentals?equipment_id={ids['first_equipment']}")
     assert rental_ids(response) == [ids["rental_a"]]
     assert response.get_json()[0]["return_date"] is not None
+
+
+# ------------------------------------------------------------
+# F16: Extend a rental (PUT /rentals/<id>/extend) — R20
+# ------------------------------------------------------------
+
+
+def test_extend_moves_due_date_by_requested_days(client):
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+    original_due = date.fromisoformat(rental["due_date"])
+
+    response = client.put(f"/rentals/{rental['id']}/extend", json={"days": 5})
+    assert response.status_code == 200
+    assert response.get_json()["due_date"] == (
+        original_due + timedelta(days=5)
+    ).isoformat()
+
+
+def test_extend_defaults_to_one_day(client):
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+    original_due = date.fromisoformat(rental["due_date"])
+
+    response = client.put(f"/rentals/{rental['id']}/extend", json={})
+    assert response.status_code == 200
+    assert response.get_json()["due_date"] == (
+        original_due + timedelta(days=1)
+    ).isoformat()
+
+
+def test_extend_is_persisted_and_cumulative(client):
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+    original_due = date.fromisoformat(rental["due_date"])
+
+    client.put(f"/rentals/{rental['id']}/extend", json={"days": 2})
+    client.put(f"/rentals/{rental['id']}/extend", json={"days": 3})
+
+    assert find_rental(client, rental["id"])["due_date"] == (
+        original_due + timedelta(days=5)
+    ).isoformat()
+
+
+def test_extend_returned_rental_is_rejected(client):
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+    client.put(f"/rentals/{rental['id']}/return")
+
+    response = client.put(f"/rentals/{rental['id']}/extend", json={"days": 2})
+    assert response.status_code == 400
+    assert find_rental(client, rental["id"])["due_date"] == rental["due_date"]
+
+
+def test_extend_unknown_rental_returns_404(client):
+    response = client.put("/rentals/999/extend", json={"days": 2})
+    assert response.status_code == 404
+
+
+def test_extend_with_negative_days_is_rejected(client):
+    """Boundary: an extension cannot move the due date earlier."""
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+
+    response = client.put(f"/rentals/{rental['id']}/extend", json={"days": -3})
+    assert response.status_code == 400
+    assert find_rental(client, rental["id"])["due_date"] == rental["due_date"]
+
+
+# ------------------------------------------------------------
+# F17: Release a deposit (PUT /rentals/<id>/deposit/release) — R15
+# ------------------------------------------------------------
+
+
+def test_release_deposit_after_return_succeeds(client):
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id, deposit_amount=50.0)
+    client.put(f"/rentals/{rental['id']}/return")
+
+    response = client.put(f"/rentals/{rental['id']}/deposit/release")
+    assert response.status_code == 200
+    assert response.get_json() == {"rental_id": rental["id"], "deposit_released": True}
+
+
+def test_release_deposit_is_persisted_on_rental(client):
+    """A released deposit still shows as released when the rental is read back."""
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id, deposit_amount=50.0)
+    client.put(f"/rentals/{rental['id']}/return")
+
+    client.put(f"/rentals/{rental['id']}/deposit/release")
+    assert find_rental(client, rental["id"])["deposit_released"] is True
+
+
+def test_release_deposit_before_return_is_rejected(client):
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id, deposit_amount=50.0)
+
+    response = client.put(f"/rentals/{rental['id']}/deposit/release")
+    assert response.status_code == 400
+    assert find_rental(client, rental["id"])["deposit_released"] is False
+
+
+def test_release_deposit_unknown_rental_returns_404(client):
+    assert client.put("/rentals/999/deposit/release").status_code == 404
