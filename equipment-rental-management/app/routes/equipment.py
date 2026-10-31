@@ -61,11 +61,8 @@ def delete_equipment(equipment_id):
 def set_equipment_status(equipment_id):
     """Mark equipment as available or out-of-service (e.g. under repair).
 
-    Set is_available=false to take a piece of equipment out of service.
-
-    NOTE (intentional bug): checkout_equipment() in rentals.py does NOT check
-    this flag. Out-of-service equipment can still be checked out — a test that
-    marks equipment unavailable and then attempts a checkout will reveal this.
+    Set is_available=false to take a piece of equipment out of service. New
+    checkouts of out-of-service equipment are rejected.
     """
     item = store.equipment.get(equipment_id)
     if item is None:
