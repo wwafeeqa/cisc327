@@ -47,12 +47,14 @@ app working without a REST client, and calls the same in-memory store.
 | GET | `/equipment/<id>` | Get one equipment item |
 | PUT | `/equipment/<id>` | Update an equipment item |
 | DELETE | `/equipment/<id>` | Delete an equipment item |
+| PATCH | `/equipment/<id>/status` | Mark equipment in or out of service (`is_available`) |
+| GET | `/equipment/<id>/availability` | Get an item's availability summary |
 | GET | `/renters` | List all renters |
 | POST | `/renters` | Create a renter |
 | GET | `/renters/<id>` | Get one renter |
 | PUT | `/renters/<id>` | Update a renter |
 | DELETE | `/renters/<id>` | Delete a renter |
-| POST | `/rentals` | Check out equipment (`equipment_id`, `renter_id`) |
+| POST | `/rentals` | Check out equipment (`equipment_id`, `renter_id`); returns 400 if the item is out of service |
 | PUT | `/rentals/<id>/return` | Return rented equipment |
 | GET | `/rentals?renter_id=&equipment_id=` | Look up rentals |
 
