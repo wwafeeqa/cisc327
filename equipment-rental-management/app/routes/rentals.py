@@ -8,15 +8,30 @@ from app.models.rental import Rental
 rentals_bp = Blueprint("rentals", __name__, url_prefix="/rentals")
 
 
+def _name_matches(record, query):
+    """Case-insensitive partial match; a deleted renter or item never matches."""
+    return record is not None and query.lower() in record.name.lower()
+
+
 @rentals_bp.route("", methods=["GET"])
 def list_rentals():
     results = list(store.rentals.values())
     renter_id = request.args.get("renter_id", type=int)
     equipment_id = request.args.get("equipment_id", type=int)
+    renter_name = request.args.get("renter_name")
+    item_name = request.args.get("item_name")
     if renter_id is not None:
-        results = [r for r in results if r.equipment_id == renter_id]
+        results = [r for r in results if r.renter_id == renter_id]
     if equipment_id is not None:
         results = [r for r in results if r.equipment_id == equipment_id]
+    if renter_name:
+        results = [
+            r for r in results if _name_matches(store.renters.get(r.renter_id), renter_name)
+        ]
+    if item_name:
+        results = [
+            r for r in results if _name_matches(store.equipment.get(r.equipment_id), item_name)
+        ]
     return jsonify([r.to_dict() for r in results])
 
 
