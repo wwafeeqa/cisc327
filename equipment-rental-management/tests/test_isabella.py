@@ -103,3 +103,101 @@ def test_update_renter_email(client):
 
     assert renter["email"] == "deborahryan@gmail.com"
     assert renter["name"] == "Deborah Ryan"
+
+
+# Enhancement: search rentals by renter name and item name (R9a, R9b)
+# Written by Wafeeqa Chowdhury in Isabella's place, with permission.
+def create_named_rentals(client):
+    """
+    Creates two rentals whose renter and item names differ, returns their ids
+    """
+    ladder = client.post("/equipment", json={"name": "Extension Ladder","category": "Climbing","total_units": 2}).get_json()["id"]
+    washer = client.post("/equipment", json={"name": "Pressure Washer","category": "Cleaning","total_units": 2}).get_json()["id"]
+    robert = client.post("/renters", json={"name": "Robert Pattinson","email": "robpattinson@gmail.com"}).get_json()["id"]
+    noah = client.post("/renters", json={"name": "Noah Kahan","email": "noahkahan@gmail.com"}).get_json()["id"]
+
+    robert_rental = client.post("/rentals", json={"equipment_id": ladder,"renter_id": robert}).get_json()
+    noah_rental = client.post("/rentals", json={"equipment_id": washer,"renter_id": noah}).get_json()
+    return robert_rental, noah_rental
+
+
+def test_search_rentals_by_renter_name(client):
+    """
+    R9a: searching a renter's full name returns only that renter's rental with its details
+    """
+    robert_rental, _ = create_named_rentals(client)
+
+    response = client.get("/rentals", query_string={"renter_name": "Robert Pattinson"})
+    assert response.status_code == 200
+    assert response.get_json() == [robert_rental]
+
+
+def test_search_rentals_by_item_name(client):
+    """
+    R9b: searching an item's full name returns only rentals of that item
+    """
+    _, noah_rental = create_named_rentals(client)
+
+    response = client.get("/rentals", query_string={"item_name": "Pressure Washer"})
+    assert response.status_code == 200
+    assert response.get_json() == [noah_rental]
+
+
+def test_search_rentals_by_name_is_partial_and_ignores_case(client):
+    """
+    R9a, R9b: a clerk can find a rental from part of a name typed in any case
+    """
+    robert_rental, noah_rental = create_named_rentals(client)
+
+    assert client.get("/rentals", query_string={"renter_name": "pattin"}).get_json() == [robert_rental]
+    assert client.get("/rentals", query_string={"item_name": "WASHER"}).get_json() == [noah_rental]
+
+
+def test_search_rentals_by_renter_and_item_name_together(client):
+    """
+    R9a, R9b: combined searches only return rentals matching both names
+    """
+    robert_rental, _ = create_named_rentals(client)
+
+    both = client.get("/rentals", query_string={"renter_name": "Robert", "item_name": "Ladder"})
+    assert both.get_json() == [robert_rental]
+
+    mismatched = client.get("/rentals", query_string={"renter_name": "Robert", "item_name": "Washer"})
+    assert mismatched.status_code == 200
+    assert mismatched.get_json() == []
+
+
+def test_search_rentals_with_no_matching_name_returns_empty_list(client):
+    """
+    Names that match nothing return an empty list rather than an error
+    """
+    create_named_rentals(client)
+
+    response = client.get("/rentals", query_string={"renter_name": "Nobody"})
+    assert response.status_code == 200
+    assert response.get_json() == []
+
+
+def test_search_rentals_by_name_includes_returned_rentals(client):
+    """
+    A search shows the current return date, so history stays searchable after a return
+    """
+    robert_rental, _ = create_named_rentals(client)
+    returned = client.put(f"/rentals/{robert_rental['id']}/return").get_json()
+
+    response = client.get("/rentals", query_string={"renter_name": "Robert"})
+    assert response.get_json() == [returned]
+    assert response.get_json()[0]["return_date"] is not None
+
+
+def test_search_rentals_after_renter_is_deleted_does_not_crash(client):
+    """
+    A rental whose renter was deleted no longer matches a name search but stays in the full list
+    """
+    robert_rental, noah_rental = create_named_rentals(client)
+    client.delete(f"/renters/{robert_rental['renter_id']}")
+
+    response = client.get("/rentals", query_string={"renter_name": "Robert"})
+    assert response.status_code == 200
+    assert response.get_json() == []
+    assert client.get("/rentals").get_json() == [robert_rental, noah_rental]

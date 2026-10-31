@@ -56,7 +56,7 @@ app working without a REST client, and calls the same in-memory store.
 | DELETE | `/renters/<id>` | Delete a renter |
 | POST | `/rentals` | Check out equipment (`equipment_id`, `renter_id`); returns 400 if the item is out of service |
 | PUT | `/rentals/<id>/return` | Return rented equipment |
-| GET | `/rentals?renter_id=&equipment_id=` | Look up rentals |
+| GET | `/rentals?renter_id=&equipment_id=&renter_name=&item_name=` | Look up rentals; all filters are optional, and names match partially and ignore case |
 
 ## Tests
 
