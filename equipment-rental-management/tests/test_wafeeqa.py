@@ -570,3 +570,86 @@ def test_release_deposit_before_return_is_rejected(client):
 
 def test_release_deposit_unknown_rental_returns_404(client):
     assert client.put("/rentals/999/deposit/release").status_code == 404
+
+
+# ------------------------------------------------------------
+# Enhancement: reject checkouts of out-of-service equipment — R11
+# ------------------------------------------------------------
+
+
+def test_out_of_service_checkout_explains_the_rejection(client):
+    """R11: the clerk is told why the checkout failed."""
+    equipment_id = create_equipment(client)
+    renter_id = create_renter(client)
+    client.patch(f"/equipment/{equipment_id}/status", json={"is_available": False})
+
+    response = client.post(
+        "/rentals", json={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Equipment is out of service"}
+
+
+def test_checkout_works_again_after_return_to_service(client):
+    """R10b, R11: the rejection ends once the item is back in service."""
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    client.patch(f"/equipment/{equipment_id}/status", json={"is_available": False})
+    client.post("/rentals", json={"equipment_id": equipment_id, "renter_id": renter_id})
+
+    client.patch(f"/equipment/{equipment_id}/status", json={"is_available": True})
+    rental = checkout(client, equipment_id, renter_id)
+
+    assert rental["equipment_id"] == equipment_id
+    assert [r["id"] for r in client.get("/rentals").get_json()] == [rental["id"]]
+    assert available_units(client, equipment_id) == 1
+
+
+def test_out_of_service_rejection_only_affects_that_item(client):
+    """R11: other equipment can still be rented."""
+    broken_id = create_equipment(client, name="Extension Ladder")
+    working_id = create_equipment(client, name="Pressure Washer", total_units=2)
+    renter_id = create_renter(client)
+    client.patch(f"/equipment/{broken_id}/status", json={"is_available": False})
+
+    rental = checkout(client, working_id, renter_id)
+
+    assert rental["equipment_id"] == working_id
+    assert available_units(client, working_id) == 1
+
+
+def test_open_rental_can_be_returned_after_item_goes_out_of_service(client):
+    """R11: only new checkouts are blocked, so a rented item can still come back."""
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    rental = checkout(client, equipment_id, renter_id)
+    client.patch(f"/equipment/{equipment_id}/status", json={"is_available": False})
+
+    response = client.put(f"/rentals/{rental['id']}/return")
+    assert response.status_code == 200
+    assert available_units(client, equipment_id) == 2
+
+    data = client.get(f"/equipment/{equipment_id}/availability").get_json()
+    assert data["is_available"] is False
+    response = client.post(
+        "/rentals", json={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+    assert response.status_code == 400
+
+
+def test_ui_checkout_works_again_after_return_to_service(client):
+    """R10b, R11: the web UI also allows checkouts once the item is back in service."""
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    client.patch(f"/equipment/{equipment_id}/status", json={"is_available": False})
+    client.post(
+        "/ui/rentals", data={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+
+    client.patch(f"/equipment/{equipment_id}/status", json={"is_available": True})
+    client.post(
+        "/ui/rentals", data={"equipment_id": equipment_id, "renter_id": renter_id}
+    )
+
+    assert len(client.get("/rentals").get_json()) == 1
+    assert available_units(client, equipment_id) == 1
