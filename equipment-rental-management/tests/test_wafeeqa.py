@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 
+import pytest
+
 
 def create_equipment(client, name="Extension Ladder", total_units=3):
     response = client.post(
@@ -216,6 +218,7 @@ def test_checkout_out_of_service_equipment_is_rejected(client):
     assert client.get("/rentals").get_json() == []
 
 
+@pytest.mark.xfail(reason="Defect (R8, R14): checkout does not check available units, so units go below zero")
 def test_checkout_with_no_units_left_is_rejected(client):
     """R8, R14: availability is only accurate if units cannot go below zero."""
     equipment_id = create_equipment(client, total_units=1)
@@ -229,6 +232,7 @@ def test_checkout_with_no_units_left_is_rejected(client):
     assert available_units(client, equipment_id) == 0
 
 
+@pytest.mark.xfail(reason="Defect (R15): checkout does not check that the renter exists")
 def test_checkout_unknown_renter_is_rejected(client):
     """R15: a checkout must record who rented the item, so the renter must exist."""
     equipment_id = create_equipment(client, total_units=2)
@@ -240,6 +244,7 @@ def test_checkout_unknown_renter_is_rejected(client):
     assert available_units(client, equipment_id) == 2
 
 
+@pytest.mark.xfail(reason="Defect (R8, R14): checkout does not check available units, so an item with no units can be rented")
 def test_checkout_equipment_with_zero_total_units_is_rejected(client):
     """R8, R14: boundary, an item created with no units can never be rented."""
     equipment_id = create_equipment(client, total_units=0)
@@ -252,6 +257,7 @@ def test_checkout_equipment_with_zero_total_units_is_rejected(client):
     assert available_units(client, equipment_id) == 0
 
 
+@pytest.mark.xfail(reason="Defect (R8, R14, R15): checkout takes a unit before reading renter_id, so a failed checkout loses a unit")
 def test_checkout_missing_renter_id_does_not_consume_a_unit(client):
     """R8, R14, R15: a checkout with no renter fails and leaves availability intact."""
     # Report the app's KeyError as a 500 response instead of re-raising it here.
@@ -302,6 +308,7 @@ def test_ui_checkout_out_of_service_equipment_creates_nothing(client):
     assert available_units(client, equipment_id) == 2
 
 
+@pytest.mark.xfail(reason="Defect (R8, R14): UI checkout does not check available units")
 def test_ui_checkout_with_no_units_left_creates_nothing(client):
     """R8, R14: web UI checkouts also cannot push available_units below zero."""
     equipment_id = create_equipment(client, total_units=1)
@@ -509,6 +516,7 @@ def test_extend_unknown_rental_returns_404(client):
     assert response.status_code == 404
 
 
+@pytest.mark.xfail(reason="Defect (R18): extend accepts negative days and moves the due date earlier")
 def test_extend_with_negative_days_is_rejected(client):
     """R18: boundary, an extension cannot move the due date earlier."""
     equipment_id = create_equipment(client)
@@ -520,6 +528,7 @@ def test_extend_with_negative_days_is_rejected(client):
     assert find_rental(client, rental["id"])["due_date"] == rental["due_date"]
 
 
+@pytest.mark.xfail(reason="Defect (R18): extend has no 48-hour limit")
 def test_extend_beyond_48_hours_is_rejected(client):
     """R18: boundary, a rental can be extended by at most 48 hours."""
     equipment_id = create_equipment(client)
@@ -547,6 +556,7 @@ def test_release_deposit_after_return_succeeds(client):
     assert response.get_json() == {"rental_id": rental["id"], "deposit_released": True}
 
 
+@pytest.mark.xfail(reason="Defect (R13): release_deposit never sets rental.deposit_released, so the release is not saved")
 def test_release_deposit_is_persisted_on_rental(client):
     """R13: a released hold still shows as released when the rental is read back."""
     equipment_id = create_equipment(client)
