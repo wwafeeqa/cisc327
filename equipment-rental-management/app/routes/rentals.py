@@ -5,6 +5,8 @@ from flask import Blueprint, jsonify, request
 from app import store
 from app.models.rental import Rental
 
+from notification_service import send_notification
+
 rentals_bp = Blueprint("rentals", __name__, url_prefix="/rentals")
 
 
@@ -72,7 +74,18 @@ def return_equipment(rental_id):
     if item is not None:
         item.available_units += 1
 
-    return jsonify(rental.to_dict())
+    #find renter
+    renter=store.renters.get(rental.renter_id)
+    notification_sent=False
+
+    #sending notification
+    if renter is not None:
+        notification_sent=send_notification(
+            renter.email, "Equipment Return Confirmation",
+            "Your equipment has been successfully returned!"
+        )
+    #updating status
+    return jsonify({**rental.to_dict(),"notification_sent": notification_sent})
 
 
 @rentals_bp.route("/<int:rental_id>/extend", methods=["PUT"])
