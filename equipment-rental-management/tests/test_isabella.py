@@ -184,6 +184,8 @@ def test_search_rentals_by_name_includes_returned_rentals(client):
     """
     robert_rental, _ = create_named_rentals(client)
     returned = client.put(f"/rentals/{robert_rental['id']}/return").get_json()
+    # notification_sent is reported by the return response only, not stored on the rental
+    returned.pop("notification_sent")
 
     response = client.get("/rentals", query_string={"renter_name": "Robert"})
     assert response.get_json() == [returned]
