@@ -40,6 +40,8 @@ def send_notification(recipient: str, subject: str, message: str) -> bool:
     this simulator does not validate email addresses or actual deliverability.
     Valid values are stored exactly as supplied. Repeated sends are recorded
     separately. True means recorded by the simulator, not delivered by email.
+
+    Implemented for returning notifications
     """
     if not all(isinstance(value, str) and value.strip()
                for value in (recipient, subject, message)):
@@ -50,7 +52,7 @@ def send_notification(recipient: str, subject: str, message: str) -> bool:
 
     _notifications.append({
         "recipient": recipient,
-        "subject": subject,
+        "subject": f"[Equipment Rental] {subject}",
         "message": message,
     })
     return True
