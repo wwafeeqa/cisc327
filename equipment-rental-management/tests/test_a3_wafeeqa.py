@@ -113,3 +113,162 @@ def test_no_notification_when_renter_deleted(client):
         assert find_rental(client, rental["id"])["return_date"] is not None
         assert available_units(client, equipment_id) == 2
         mock_send.assert_not_called()
+
+
+# Task 3: coverage-directed tests (Member B areas in Table A)
+
+# update_equipment (PUT /equipment/<id>)
+
+
+def test_update_equipment_changes_fields_and_persists(client):
+    """A full update is returned and saved."""
+    equipment_id = create_equipment(client, name="Ladder", total_units=2)
+
+    response = client.put(
+        f"/equipment/{equipment_id}",
+        json={"name": "Tall Ladder", "category": "Access", "total_units": 4,
+              "available_units": 4, "is_available": False},
+    )
+
+    assert response.status_code == 200
+    expected = {"id": equipment_id, "name": "Tall Ladder", "category": "Access",
+                "total_units": 4, "available_units": 4, "is_available": False}
+    assert response.get_json() == expected
+    assert client.get(f"/equipment/{equipment_id}").get_json() == expected
+
+
+def test_update_equipment_partial_keeps_other_fields(client):
+    """Fields left out of the request keep their current values."""
+    equipment_id = create_equipment(client, name="Ladder", total_units=3)
+
+    response = client.put(f"/equipment/{equipment_id}", json={"name": "Step Ladder"})
+
+    assert response.status_code == 200
+    item = client.get(f"/equipment/{equipment_id}").get_json()
+    assert item["name"] == "Step Ladder"
+    assert item["category"] == "Climbing"
+    assert item["total_units"] == 3
+    assert item["available_units"] == 3
+    assert item["is_available"] is True
+
+
+def test_update_unknown_equipment_returns_404(client):
+    """Updating equipment that does not exist is rejected and creates nothing."""
+    response = client.put("/equipment/999", json={"name": "Ghost"})
+
+    assert response.status_code == 404
+    assert response.get_json()["error"] == "Equipment not found"
+    assert client.get("/equipment").get_json() == []
+
+
+# update_renter (PUT /renters/<id>)
+
+
+def test_update_renter_partial_keeps_email(client):
+    """Changing only the name leaves the email unchanged."""
+    renter_id = create_renter(client, name="Sam Lee")
+
+    response = client.put(f"/renters/{renter_id}", json={"name": "Samuel Lee"})
+
+    assert response.status_code == 200
+    renter = client.get(f"/renters/{renter_id}").get_json()
+    assert renter["name"] == "Samuel Lee"
+    assert renter["email"] == "sam@example.com"
+
+
+def test_update_unknown_renter_returns_404(client):
+    """Updating a renter that does not exist is rejected and creates nothing."""
+    response = client.put("/renters/999", json={"name": "Nobody"})
+
+    assert response.status_code == 404
+    assert response.get_json()["error"] == "Renter not found"
+    assert client.get("/renters").get_json() == []
+
+
+# views.py pages
+
+
+def test_home_page_links_to_each_section(client):
+    """The home page renders with links to the equipment, renter and rental pages."""
+    response = client.get("/")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Equipment Rental Management" in html
+    for path in ("/ui/equipment", "/ui/renters", "/ui/rentals"):
+        assert f'href="{path}"' in html
+
+
+def test_ui_delete_equipment_removes_item_and_redirects(client):
+    """Deleting equipment from the UI removes it and returns to the equipment page."""
+    keep_id = create_equipment(client, name="Keep Ladder")
+    delete_id = create_equipment(client, name="Old Ladder")
+
+    response = client.post(f"/ui/equipment/{delete_id}/delete")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/ui/equipment")
+    assert client.get(f"/equipment/{delete_id}").status_code == 404
+    assert [e["id"] for e in client.get("/equipment").get_json()] == [keep_id]
+
+
+def test_ui_delete_unknown_equipment_changes_nothing(client):
+    """Deleting a nonexistent id from the UI still redirects and removes nothing."""
+    equipment_id = create_equipment(client)
+
+    response = client.post("/ui/equipment/999/delete")
+
+    assert response.status_code == 302
+    assert [e["id"] for e in client.get("/equipment").get_json()] == [equipment_id]
+
+
+def test_ui_delete_renter_removes_renter_and_redirects(client):
+    """Deleting a renter from the UI removes them and returns to the renters page."""
+    keep_id = create_renter(client, name="Kim Park")
+    delete_id = create_renter(client, name="Sam Lee")
+
+    response = client.post(f"/ui/renters/{delete_id}/delete")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/ui/renters")
+    assert client.get(f"/renters/{delete_id}").status_code == 404
+    assert [r["id"] for r in client.get("/renters").get_json()] == [keep_id]
+
+
+def test_ui_delete_unknown_renter_changes_nothing(client):
+    """Deleting a nonexistent renter from the UI still redirects and removes nothing."""
+    renter_id = create_renter(client)
+
+    response = client.post("/ui/renters/999/delete")
+
+    assert response.status_code == 302
+    assert [r["id"] for r in client.get("/renters").get_json()] == [renter_id]
+
+
+def test_ui_rentals_page_empty(client):
+    """With no rentals, the page renders the checkout form and no Return buttons."""
+    response = client.get("/ui/rentals")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Check Out Equipment" in html
+    assert "Return</button>" not in html
+
+
+def test_ui_rentals_page_lists_open_and_returned_rentals(client):
+    """Open rentals show a Return button; returned rentals show their return date."""
+    equipment_id = create_equipment(client, total_units=2)
+    renter_id = create_renter(client)
+    open_rental = checkout(client, equipment_id, renter_id)
+    returned = checkout(client, equipment_id, renter_id)
+    with patch(NOTIFY, return_value=True):
+        client.put(f"/rentals/{returned['id']}/return")
+
+    response = client.get("/ui/rentals")
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert html.count("Return</button>") == 1
+    assert f"/ui/rentals/{open_rental['id']}/return" in html
+    assert f"/ui/rentals/{returned['id']}/return" not in html
+    assert html.count("<td>-</td>") == 1  # only the open rental has no return date
