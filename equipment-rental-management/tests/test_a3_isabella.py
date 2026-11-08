@@ -120,7 +120,7 @@ def test_equipment_page_post(client):
         data={"name":"Bicycle", "category":"Sports","total_units": "4"}
     )
     assert response.status_code == 302
-    assert response.headers["Location"].endswith("ui/equipment")
+    assert response.headers["Location"].endswith("ui/equipment") #redirects back to equipment page
 
     eqResponse=client.get("/equipment")
     eq=eqResponse.get_json() 
@@ -131,3 +131,27 @@ def test_equipment_page_post(client):
     assert eq[0]["category"]=="Sports"
     assert eq[0]["total_units"]==4 
     assert eq[0]["available_units"]==eq[0]["total_units"]
+
+#Renters Page
+#Get Renters Page
+def test_renters_page_get(client):
+    response=client.get("ui/renters")
+    assert response.status_code==200
+    assert response.content_type.startswith("text/html")
+
+#Post Renters Page
+def test_renters_page_post(client):
+    response=client.post(
+        "ui/renters",
+        data={"name":"Doug Ford","email":"dougford@gmail.com"}
+    )
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("ui/renters") #redirects back to renter page
+
+    renterResponse=client.get("/renters")
+    renter=renterResponse.get_json()
+
+    #checking data
+    assert len(renter)==1
+    assert renter[0]["name"]=="Doug Ford"
+    assert renter[0]["email"]=="dougford@gmail.com"
