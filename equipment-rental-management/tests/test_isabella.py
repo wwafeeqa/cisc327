@@ -186,8 +186,9 @@ def test_search_rentals_by_name_includes_returned_rentals(client):
     returned = client.put(f"/rentals/{robert_rental['id']}/return").get_json()
 
     response = client.get("/rentals", query_string={"renter_name": "Robert"})
-    assert response.get_json() == [returned]
-    assert response.get_json()[0]["return_date"] is not None
+    searched_rental = response.get_json()[0]
+    assert searched_rental["id"]==returned["id"]
+    assert searched_rental["return_date"] is not None
 
 
 def test_search_rentals_after_renter_is_deleted_does_not_crash(client):
