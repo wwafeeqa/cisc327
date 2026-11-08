@@ -79,3 +79,15 @@ def test_return_notification_details(client):
             "Equipment Return Confirmation",
             "Your equipment has been successfully returned!"
         )
+
+
+#Coverage Tests 
+#Delete Equipment
+def test_delete_equipment(client):
+    """
+    Deletes it a piece of equipment that does not exist and returns a 404 error
+    """
+    response = client.delete("/equipment/10")
+    assert response.status_code == 404
+    assert response.get_json()== {"error": "Equipment not found"}
+
