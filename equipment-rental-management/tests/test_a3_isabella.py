@@ -83,11 +83,18 @@ def test_return_notification_details(client):
 
 #Coverage Tests 
 #Delete Equipment
-def test_delete_equipment(client):
+def test_delete_equipment_not_found(client):
     """
-    Deletes it a piece of equipment that does not exist and returns a 404 error
+    Deletes a piece of equipment that does not exist and returns a 404 error
     """
     response = client.delete("/equipment/10")
     assert response.status_code == 404
     assert response.get_json()== {"error": "Equipment not found"}
 
+def test_get_renter_not_found(client):
+    """
+    Attempts to retrieve a renter that does not exist 
+    """
+    response = client.get("/renters/5")
+    assert response.status_code == 404
+    assert response.get_json()== {"error": "Renter not found"}
