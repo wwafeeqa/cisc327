@@ -14,7 +14,35 @@ pip install -r requirements.txt
 python run.py
 ```
 
-The API runs at `http://127.0.0.1:5000`.python run.py
+The app runs at `http://127.0.0.1:5000`.
+
+> **macOS:** the AirPlay Receiver uses port 5000. Turn it off in
+> System Settings → General → AirDrop & Handoff before starting the app.
+
+## Run with Docker
+
+**Prerequisites:** [Docker Desktop](https://docs.docker.com/get-docker/)
+(Windows/macOS) or Docker Engine (Linux). Check it with `docker --version`.
+
+From this folder (`equipment-rental-management/`, where the `Dockerfile` is):
+
+```bash
+docker build -t cisc327-a4 .                 # build the image
+docker run --rm -p 5000:5000 cisc327-a4      # run it (Ctrl+C to stop)
+```
+
+The container serves the app on port **5000**, so open
+`http://127.0.0.1:5000/` the same as when running locally. To run it in the
+background instead:
+
+```bash
+docker run --rm -d --name cisc327-a4 -p 5000:5000 cisc327-a4
+docker stop cisc327-a4                       # stop (and remove) it
+```
+
+**Data does not persist.** The container runs the same in-memory app, so all
+equipment, renters, and rentals are lost when the container stops. Every new
+container starts empty.
 
 ## Web UI
 
@@ -64,3 +92,23 @@ app working without a REST client, and calls the same in-memory store.
 pytest
 ```
 
+### End-to-end (browser) tests
+
+The Playwright tests in `tests/e2e/` drive a real browser against a running
+copy of the app over HTTP, either local or in Docker.
+
+```bash
+pip install -r requirements.txt
+python -m playwright install chromium
+
+# Terminal 1: start the app, either locally or in Docker
+python run.py                                # or: docker run --rm -p 5000:5000 cisc327-a4
+
+# Terminal 2: run the tests (--headed shows the browser)
+python -m pytest tests/e2e -v --headed
+```
+
+Each test creates its own data, so the tests don't need a fresh server and can
+run in any order. They target `http://127.0.0.1:5000` by default; set
+`E2E_BASE_URL` to use another address. If no app is running, the E2E tests are
+skipped, so a plain `pytest` (as in CI) still runs only the unit tests.
