@@ -1,0 +1,37 @@
+# Version control and CI
+.git
+.gitignore
+.github
+
+# Python caches and virtual environments
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Tests and test-generated files (not needed to run the app)
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+test-results/
+playwright-report/
+
+# API testing collections, docs, editor and OS files
+postman/
+*.md
+.vscode/
+.idea/
+.DS_Store
+
+# Secrets, in case any are ever added locally
+.env
+.env.*
+*.pem
+*.key
+
+# Docker files themselves
+Dockerfile
+.dockerignore
