@@ -308,7 +308,6 @@ def test_ui_checkout_out_of_service_equipment_creates_nothing(client):
     assert available_units(client, equipment_id) == 2
 
 
-@pytest.mark.xfail(reason="Defect (R8, R14): UI checkout does not check available units")
 def test_ui_checkout_with_no_units_left_creates_nothing(client):
     """R8, R14: web UI checkouts also cannot push available_units below zero."""
     equipment_id = create_equipment(client, total_units=1)

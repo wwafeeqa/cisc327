@@ -60,7 +60,7 @@ def rentals_page():
         equipment_id = int(request.form["equipment_id"])
         renter_id = int(request.form["renter_id"])
         item = store.equipment.get(equipment_id)
-        if item is not None and item.is_available:
+        if item is not None and item.is_available and item.available_units > 0:
             item.available_units -= 1
             rental_id = store.next_id("rental")
             rental = Rental(
